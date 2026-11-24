@@ -1,0 +1,43 @@
+# lm-mxl-omt on the mxl-test VM, next to mxl-stack (for lm-infra's
+# mxl-test/compose.lm-omt.yaml). Image built on the VM from ~/lm-mxl-omt
+# (docker/Dockerfile). Web 8200 (Caddy 18200), NMOS 3334, OMT 6400–6431.
+services:
+  omt-bridge:
+    image: lm-mxl-omt:dev
+    network_mode: host
+    # The entrypoint starts dbus + avahi-daemon (OMT discovery) as root and
+    # runs the bridge as 1000:1000, the owner of the MXL tmpfs.
+    user: "0:0"
+    init: true
+    depends_on: [registry]
+    environment:
+      RUN_AS: "1000:1000"
+      OMT_AVAHI: internal
+      NMOS_REGISTRY_ADDRESS: ${NMOS_REGISTRY_ADDRESS:-127.0.0.1}
+      NMOS_REGISTRY_PORT: ${NMOS_REGISTRY_PORT:-3210}
+      NMOS_QUERY_ADDRESS: ${NMOS_REGISTRY_ADDRESS:-127.0.0.1}
+      NMOS_QUERY_PORT: ${NMOS_QUERY_PORT:-3211}
+      NMOS_DNS_SD: "false"
+      NMOS_HOST_ADDRESS: ${HOST_IP}
+      NMOS_SEED: ${STACK_ID:-stack}-omt-bridge
+      NMOS_LABEL: OMT bridge
+      NMOS_PORT: "3334"
+      WEB_PORT: "8200"
+      MXL_DOMAIN_SCAN_PATH: /Volumes/mxl
+      MXL_OUTPUT_DOMAIN_DIR: /Volumes/mxl/omt-bridge
+      MXL_CLEANUP_ON_EXIT: "true"
+      SHUTDOWN_TIMEOUT_S: "10"
+      VIDEO_FORMAT: ${VIDEO_FORMAT:-1080p50}
+      OMT_LABEL_PREFIX: OMT
+      OMT_INPUTS: "8"
+      OMT_OUTPUTS: "8"
+      OMT_PORT_START: "6400"
+      OMT_PORT_END: "6431"
+    volumes:
+      - type: bind
+        source: ${MXL_ROOT:-/Volumes/mxl}
+        target: /Volumes/mxl
+      - omt-bridge-config:/config
+    restart: unless-stopped
+volumes:
+  omt-bridge-config:
