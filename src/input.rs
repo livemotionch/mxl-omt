@@ -101,6 +101,7 @@ pub struct Input {
     /// Grain time − sender time of the video frames (smoothed): where the
     /// audio goes, so it lands exactly as late as the picture
     av_shift: Option<i64>,
+    audio_realign: bool,
     last_audio: Option<Instant>,
     sec: Second,
     sec_start: Instant,
@@ -171,6 +172,7 @@ impl Input {
             last_frame: None,
             next_sample: None,
             av_shift: None,
+            audio_realign: false,
             last_audio: None,
             sec: Second::default(),
             sec_start: Instant::now(),
@@ -418,7 +420,11 @@ impl Input {
         // Frame-synchronised sources shift by up to a grain from frame to
         // frame: the audio follows the average.
         self.av_shift = Some(match self.av_shift {
-            None => shift,
+            None => {
+                // Audio written so far went by the raw delay: place again.
+                self.audio_realign = true;
+                shift
+            }
             Some(a) => a + (shift - a) / 16,
         });
         let lat = shift as f64 / 1e6;
@@ -473,8 +479,9 @@ impl Input {
         let s0 = self.clock.time_to_index(&self.arate, target);
         let data = unsafe { std::slice::from_raw_parts(f.data as *const f32, n * ch) };
         let mut skip = 0usize;
+        let slip = if std::mem::take(&mut self.audio_realign) { 0 } else { AUDIO_SLIP };
         let start = match self.next_sample {
-            Some(next) if (s0 as i64 - next as i64).abs() <= AUDIO_SLIP => next,
+            Some(next) if (s0 as i64 - next as i64).abs() <= slip => next,
             Some(next) if s0 > next && s0 - next < 48_000 => {
                 // A gap: silence up to the new position.
                 lock(&self.shared.inputs[self.i].status).audio_resyncs += 1;
