@@ -221,6 +221,11 @@ impl Input {
         self.timing = None;
         self.next_sample = None;
         self.av_shift = None;
+        if want.is_empty() {
+            // No source: black, not the last picture of the old one.
+            self.have_held = false;
+            self.last_frame = None;
+        }
         {
             let mut st = lock(&self.shared.inputs[self.i].status);
             st.source = want.clone();
