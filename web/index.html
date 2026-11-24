@@ -1,1 +1,95 @@
-<!doctype html><title>OMT bridge</title>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OMT bridge</title>
+<style>
+:root { --bg:#f6f7f9; --fg:#1d2330; --muted:#667085; --card:#fff; --line:#e3e6eb; --ok:#1a7f37; --warn:#b26b00; --bad:#c62828; --accent:#2d5bd7; }
+@media (prefers-color-scheme: dark) { :root { --bg:#12151b; --fg:#e6e9ef; --muted:#9aa3b2; --card:#1b2029; --line:#2b3240; --ok:#3fb950; --warn:#d29922; --bad:#f85149; --accent:#6d8cff; } }
+* { box-sizing: border-box; }
+body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:20px; align-items:baseline; flex-wrap:wrap; }
+h1 { font-size:18px; margin:0; }
+h2 { font-size:15px; margin:22px 20px 8px; }
+.meta { color:var(--muted); }
+.wrap { overflow-x:auto; margin:0 20px; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums; }
+th, td { padding:7px 10px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; vertical-align:top; }
+th { font-weight:600; color:var(--muted); font-size:12px; }
+tr:last-child td { border-bottom:0; }
+.s { font-weight:600; }
+.s.ok { color:var(--ok); } .s.holding, .s.connecting { color:var(--warn); } .s.no_signal, .s.unsupported, .s.no_route, .s.no_source { color:var(--bad); }
+.err { color:var(--bad); font-size:12px; white-space:normal; max-width:28em; }
+.small { font-size:12px; color:var(--muted); }
+input[type=text] { width:20em; padding:4px 6px; border:1px solid var(--line); border-radius:4px; background:var(--bg); color:var(--fg); }
+button { padding:4px 10px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:4px; cursor:pointer; }
+.threads { margin:8px 20px 30px; color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header><h1>OMT bridge</h1><span class="meta" id="meta"></span></header>
+<h2>OMT inputs → MXL</h2>
+<div class="wrap"><table id="inputs"></table></div>
+<datalist id="sources"></datalist>
+<h2>MXL → OMT outputs</h2>
+<div class="wrap"><table id="outputs"></table></div>
+<div class="threads" id="threads"></div>
+<script>
+const f = (v, d = 1) => v === null || v === undefined ? '–' : Number(v).toFixed(d);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const editing = new Set();
+async function setSource(n) {
+  const v = document.getElementById('src-' + n).value;
+  await fetch('api/inputs/' + n, {method: 'PUT', headers: {'content-type': 'application/json'}, body: JSON.stringify({source: v})});
+  editing.delete(n);
+}
+async function sources() {
+  try {
+    const list = await (await fetch('api/sources')).json();
+    document.getElementById('sources').innerHTML = list.map(s => `<option value="${esc(s)}">`).join('');
+  } catch (e) {}
+}
+function route(r) { return r ? `<span class="small">${esc(r.flow).slice(0, 8)}… in ${esc(r.domain)}</span>` : '<span class="small">–</span>'; }
+async function tick() {
+  let s;
+  try { s = await (await fetch('api/status')).json(); } catch (e) { return; }
+  document.getElementById('meta').textContent =
+    `${s.label} · ${s.format} · v${s.version} · CPU ${f(s.cpu_percent, 0)}% of a core · NMOS ${s.nmos.registered ? 'registered' : 'not registered'} · up ${s.uptime_s} s`;
+  const it = document.getElementById('inputs');
+  if (!it.dataset.built || it.rows.length - 1 !== s.inputs.length) {
+    it.innerHTML = '<tr><th>#</th><th>Source</th><th>State</th><th>Format</th><th>fps in / out</th><th>Dropped / repeated / black</th><th>Latency (transit)</th><th>Mbit/s</th><th>Decode / convert</th><th>Audio</th><th>Resyncs</th></tr>' +
+      s.inputs.map(i => `<tr id="in-${i.index}"></tr>`).join('');
+    it.dataset.built = 1;
+  }
+  for (const i of s.inputs) {
+    const row = document.getElementById('in-' + i.index);
+    const keep = editing.has(i.index) ? document.getElementById('src-' + i.index)?.value : i.source;
+    const fmt = i.codec ? `${esc(i.codec)} ${i.width}×${i.height} @ ${esc(i.frame_rate)}${i.interlaced ? ' i' : ''}${i.scaled ? ' (scaled)' : ''}` : '–';
+    row.innerHTML = `<td>${i.index}</td>
+      <td><input type="text" list="sources" id="src-${i.index}" value="${esc(keep)}" onfocus="editing.add(${i.index}); sources()">
+          <button onclick="setSource(${i.index})">Set</button><div class="small">${esc(i.sender ?? '')}</div></td>
+      <td><span class="s ${esc(i.state)}">${esc(i.state)}</span>${i.error ? `<div class="err">${esc(i.error)}</div>` : ''}</td>
+      <td>${fmt}</td>
+      <td>${f(i.fps_in)} / ${f(i.fps_out)}</td>
+      <td>${i.dropped} / ${i.repeated} / ${i.black}</td>
+      <td>${f(i.latency_ms)} ms (${f(i.transit_ms)}, max ${f(i.transit_max_ms)})</td>
+      <td>${f(i.video_mbps)} + ${f(i.audio_mbps, 2)}</td>
+      <td>${f(i.decode_ms, 0)} / ${f(i.convert_ms, 2)} ms</td>
+      <td>${i.audio_channels} ch ${i.audio_rate ? i.audio_rate / 1000 + ' kHz' : ''}<div class="small">silence ${i.audio_silence}</div></td>
+      <td>${i.resyncs} / ${i.audio_resyncs}</td>`;
+  }
+  document.getElementById('outputs').innerHTML =
+    '<tr><th>#</th><th>OMT source</th><th>Conn.</th><th>Video route</th><th>Audio route</th><th>State</th><th>fps</th><th>Late / held / black / skipped</th><th>Mbit/s</th><th>Convert / send (encode)</th><th>Audio gaps</th></tr>' +
+    s.outputs.map(o => `<tr><td>${o.index}</td><td>${esc(o.address || o.name)}</td><td>${o.connections}</td>
+      <td>${route(o.video_route)}</td><td>${route(o.audio_route)}<div class="small">${esc(o.audio_state)}</div></td>
+      <td><span class="s ${esc(o.state)}">${esc(o.state)}</span>${o.error ? `<div class="err">${esc(o.error)}</div>` : ''}</td>
+      <td>${f(o.fps)}</td><td>${o.late} / ${o.held} / ${o.black} / ${o.skipped}</td>
+      <td>${f(o.video_mbps)} + ${f(o.audio_mbps, 2)}</td><td>${f(o.convert_ms, 2)} / ${f(o.send_ms, 2)} (${f(o.encode_ms, 0)}) ms</td>
+      <td>${o.audio_gaps}</td></tr>`).join('');
+  document.getElementById('threads').textContent = 'Threads (% of a core): ' + s.threads.map(([n, v]) => `${n} ${f(v, 0)}`).join(' · ');
+}
+tick(); sources(); setInterval(tick, 1000); setInterval(sources, 10000);
+</script>
+</body>
+</html>

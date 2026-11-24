@@ -1,0 +1,61 @@
+# lm-mxl-omt next to mxl-stack's compose/single-host example: an override
+# file (Compose anchors don't cross files, so the NMOS settings are spelled
+# out). From compose/single-host of mxl-stack:
+#
+#   docker compose -f compose.yaml -f /path/to/lm-mxl-omt/deploy/compose.single-host.yaml up -d omt-bridge
+#
+# Port plan (host network, one port space with the stack):
+#   web/API/metrics 8200, NMOS 3334 (+3335 reserved), OMT senders 6400–6431
+#   (one TCP port per OMT output; receivers connect out). mDNS: UDP 5353
+#   (avahi-daemon inside the container, OMT_AVAHI=internal; with a host
+#   avahi-daemon use OMT_AVAHI=host and mount /run/dbus instead).
+# The image is built from this repository (docker/Dockerfile), not pulled.
+
+services:
+  omt-bridge:
+    image: ${LM_MXL_OMT_IMAGE:-lm-mxl-omt:dev}
+    build:
+      context: ${LM_MXL_OMT_SRC:-../../../lm-mxl-omt}
+      dockerfile: docker/Dockerfile
+    network_mode: host
+    # The entrypoint starts dbus + avahi-daemon as root, then runs the bridge
+    # as RUN_AS (the MXL tmpfs owner).
+    user: "0:0"
+    init: true
+    depends_on: [registry]
+    environment:
+      RUN_AS: "1000:1000"
+      OMT_AVAHI: internal
+      NMOS_REGISTRY_ADDRESS: ${NMOS_REGISTRY_ADDRESS:-127.0.0.1}
+      NMOS_REGISTRY_PORT: ${NMOS_REGISTRY_PORT:-3210}
+      NMOS_QUERY_ADDRESS: ${NMOS_REGISTRY_ADDRESS:-127.0.0.1}
+      NMOS_QUERY_PORT: ${NMOS_QUERY_PORT:-3211}
+      NMOS_DNS_SD: "false"
+      NMOS_HOST_ADDRESS: ${HOST_IP:?set HOST_IP in .env}
+      NMOS_SEED: ${STACK_ID:-stack}-omt-bridge
+      NMOS_LABEL: OMT bridge
+      NMOS_PORT: "3334"
+      WEB_PORT: "8200"
+      MXL_DOMAIN_SCAN_PATH: /Volumes/mxl
+      MXL_OUTPUT_DOMAIN_DIR: /Volumes/mxl/omt-bridge
+      MXL_CLEANUP_ON_EXIT: "true"
+      SHUTDOWN_TIMEOUT_S: "10"
+      VIDEO_FORMAT: ${VIDEO_FORMAT:-1080p50}
+      OMT_LABEL_PREFIX: OMT
+      OMT_INPUTS: "4"
+      OMT_OUTPUTS: "4"
+      # OMT_IN1_SOURCE: "OTHERHOST (Camera 1)"   # or omt://host:port; also set in the web UI
+      # OMT_OUT1_NAME: "MXL PGM"
+      OMT_PORT_START: "6400"
+      OMT_PORT_END: "6431"
+      OMT_OUT_PIXEL: uyvy
+      OMT_STATE_DIR: /config
+    volumes:
+      - type: bind
+        source: ${MXL_ROOT:-/Volumes/mxl}
+        target: /Volumes/mxl
+      - omt-bridge-config:/config
+    restart: unless-stopped
+
+volumes:
+  omt-bridge-config:

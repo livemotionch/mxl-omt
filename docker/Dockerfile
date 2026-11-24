@@ -2,10 +2,14 @@
 # lm-mxl-omt: MXL ⇄ Open Media Transport bridge.
 #   docker build -f docker/Dockerfile -t lm-mxl-omt:dev .
 # MXL pin: dmf-mxl/mxl release/v1.1 218ddaa0a08c12ffe75fc475ae65aa3d9eef16d7, fabrics off
-# (the mxl-stack functions' pin). OMT: libomt + libomtnet (.NET 8 NativeAOT) and
+# (the mxl-stack functions' pin).
+# UBUNTU: the base image (e.g. public.ecr.aws/docker/library/ubuntu:24.04 when
+# Docker Hub rate-limits). OMT: libomt + libomtnet (.NET 8 NativeAOT) and
 # libvmx (C++), all MIT, from github.com/openmediatransport at the commits below.
 
-FROM ubuntu:24.04 AS mxl
+ARG UBUNTU=ubuntu:24.04
+
+FROM ${UBUNTU} AS mxl
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential cmake ninja-build git curl ca-certificates zip unzip tar pkg-config uuid-dev python3 \
     && rm -rf /var/lib/apt/lists/*
@@ -18,7 +22,7 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0-noble AS omt
 ARG LIBOMT_REF=bb4b67be8e5964f1017592b9fc5406495e704e5d
 ARG LIBOMTNET_REF=7d29031ff3f355ffa1f0cd08ee24d02e258445dd
 ARG LIBVMX_REF=31724bb96530325a989bc157c8e07538d6f1c4db
-ARG EXAMPLES_REF=master
+ARG EXAMPLES_REF=8963efe0ce48f288c231fbedd76264144eea8d4a
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         clang lld zlib1g-dev git ca-certificates g++ \
     && rm -rf /var/lib/apt/lists/*
@@ -43,7 +47,7 @@ RUN cd Examples/C++ \
     && cp omtsendtest/california-1080-uyvy.yuv /out/share/ \
     && for f in libomt libomtnet libvmx Examples; do cp /omt/$f/LICENSE* /out/share/LICENSE.$f.txt; done
 
-FROM ubuntu:24.04 AS build
+FROM ${UBUNTU} AS build
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         build-essential curl ca-certificates git pkg-config clang libclang-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -57,7 +61,7 @@ RUN --mount=type=cache,target=/opt/cargo/registry --mount=type=cache,target=/opt
     cargo build --release --locked --bins \
     && install -m 0755 target/release/lm-mxl-omt /usr/local/bin/
 
-FROM ubuntu:24.04 AS runtime
+FROM ${UBUNTU} AS runtime
 ARG MXL_REF=218ddaa0a08c12ffe75fc475ae65aa3d9eef16d7
 ARG VERSION=dev
 # libicu: .NET globalisation in libomt. libavahi-client: OMT discovery

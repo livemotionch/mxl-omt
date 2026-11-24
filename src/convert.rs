@@ -77,9 +77,19 @@ fn unpack_row(row: &[u8], n: usize, mut put: impl FnMut(usize, u32)) {
 pub fn uyvy_to_v210(src: &[u8], stride: usize, width: usize, height: usize, dst: &mut [u8]) {
     let n = 2 * width;
     let lb = v210_line_bytes(width);
+    let full = n / 12;
     for y in 0..height {
         let s = &src[y * stride..y * stride + n];
-        pack_row(&mut dst[y * lb..(y + 1) * lb], n, |k| (s[k] as u32) << 2);
+        let d = &mut dst[y * lb..(y + 1) * lb];
+        for (sb, db) in s.chunks_exact(12).zip(d.chunks_exact_mut(16)).take(full) {
+            for i in 0..4 {
+                let v = word((sb[3 * i] as u32) << 2, (sb[3 * i + 1] as u32) << 2, (sb[3 * i + 2] as u32) << 2);
+                db[4 * i..4 * i + 4].copy_from_slice(&v.to_le_bytes());
+            }
+        }
+        if n % 12 != 0 {
+            pack_row(d, n, |k| (s[k] as u32) << 2);
+        }
     }
 }
 
@@ -103,9 +113,38 @@ pub fn p216_to_v210(src: &[u8], stride: usize, width: usize, height: usize, dst:
 pub fn v210_to_uyvy(src: &[u8], width: usize, height: usize, dst: &mut [u8]) {
     let n = 2 * width;
     let lb = v210_line_bytes(width);
+    let full = n / 12;
+    // Rounded 10 → 8 bits as a table (no clamp in the loop).
+    let lut: [u8; 1024] = std::array::from_fn(|v| ((v as u32 + 2) >> 2).min(255) as u8);
+    let r8 = |v: u32| lut[(v & M) as usize];
+    #[cfg(target_arch = "x86_64")]
+    let avx2 = std::is_x86_feature_detected!("avx2");
     for y in 0..height {
+        let s = &src[y * lb..(y + 1) * lb];
         let d = &mut dst[y * n..(y + 1) * n];
-        unpack_row(&src[y * lb..(y + 1) * lb], n, |k, v| d[k] = ((v + 2) >> 2).min(255) as u8);
+        #[allow(unused_mut)]
+        let mut done_words = 0;
+        #[cfg(target_arch = "x86_64")]
+        if avx2 {
+            // SAFETY: AVX2 checked; the kernel stays inside both slices.
+            done_words = unsafe { crate::simd::unpack_words_u8_avx2(&s[..4 * (n / 3)], d) };
+        }
+        let skip = done_words / 4;
+        for (sb, db) in s.chunks_exact(16).zip(d.chunks_exact_mut(12)).take(full).skip(skip) {
+            let sb: &[u8; 16] = sb.try_into().unwrap();
+            let mut o = [0u8; 12];
+            for i in 0..4 {
+                let v = u32::from_le_bytes([sb[4 * i], sb[4 * i + 1], sb[4 * i + 2], sb[4 * i + 3]]);
+                o[3 * i] = r8(v);
+                o[3 * i + 1] = r8(v >> 10);
+                o[3 * i + 2] = r8(v >> 20);
+            }
+            db.copy_from_slice(&o);
+        }
+        if n % 12 != 0 {
+            let k0 = full * 12;
+            unpack_row(&s[full * 16..], n - k0, |k, v| d[k0 + k] = r8(v));
+        }
     }
 }
 
@@ -114,19 +153,37 @@ pub fn v210_to_p216(src: &[u8], width: usize, height: usize, dst: &mut [u8]) {
     let n = 2 * width;
     let lb = v210_line_bytes(width);
     let stride = 2 * width;
+    let full = n / 12;
     let (yp, cp) = dst.split_at_mut(stride * height);
     for y in 0..height {
+        let s = &src[y * lb..(y + 1) * lb];
         let yr = &mut yp[y * stride..(y + 1) * stride];
         let cr = &mut cp[y * stride..(y + 1) * stride];
-        unpack_row(&src[y * lb..(y + 1) * lb], n, |k, v| {
-            let b = ((v << 6) as u16).to_le_bytes();
-            let i = 2 * (k >> 1);
-            if k & 1 == 1 {
-                yr[i..i + 2].copy_from_slice(&b);
-            } else {
-                cr[i..i + 2].copy_from_slice(&b);
+        // 6 pixels per block: 6 luma (12 bytes) and 6 chroma (12 bytes).
+        for ((sb, yb), cb) in s.chunks_exact(16).zip(yr.chunks_exact_mut(12)).zip(cr.chunks_exact_mut(12)).take(full) {
+            let w = |i: usize| u32::from_le_bytes([sb[4 * i], sb[4 * i + 1], sb[4 * i + 2], sb[4 * i + 3]]);
+            let (w0, w1, w2, w3) = (w(0), w(1), w(2), w(3));
+            // samples: Cb0 Y0 Cr0 | Y1 Cb2 Y2 | Cr2 Y3 Cb4 | Y4 Cr4 Y5
+            let ys = [w0 >> 10, w1, w1 >> 20, w2 >> 10, w3, w3 >> 20];
+            let cs = [w0, w0 >> 20, w1 >> 10, w2, w2 >> 20, w3 >> 10];
+            for i in 0..6 {
+                yb[2 * i..2 * i + 2].copy_from_slice(&(((ys[i] & M) << 6) as u16).to_le_bytes());
+                cb[2 * i..2 * i + 2].copy_from_slice(&(((cs[i] & M) << 6) as u16).to_le_bytes());
             }
-        });
+        }
+        if n % 12 != 0 {
+            let k0 = full * 12;
+            unpack_row(&s[full * 16..], n - k0, |k, v| {
+                let k = k0 + k;
+                let b = ((v << 6) as u16).to_le_bytes();
+                let i = 2 * (k >> 1);
+                if k & 1 == 1 {
+                    yr[i..i + 2].copy_from_slice(&b);
+                } else {
+                    cr[i..i + 2].copy_from_slice(&b);
+                }
+            });
+        }
     }
 }
 
@@ -309,5 +366,45 @@ mod tests {
         let mut u = vec![0u8; 3840];
         v210_to_uyvy(&v, 1920, 1, &mut u);
         assert_eq!(&u[..4], &[128, 16, 128, 16]);
+    }
+}
+
+#[cfg(test)]
+mod bench {
+    use super::*;
+
+    fn v210_to_uyvy_scalar(src: &[u8], width: usize, height: usize, dst: &mut [u8]) {
+        let (n, lb) = (2 * width, v210_line_bytes(width));
+        for y in 0..height {
+            let d = &mut dst[y * n..(y + 1) * n];
+            unpack_row(&src[y * lb..(y + 1) * lb], n, |k, v| d[k] = ((v + 2) >> 2).min(255) as u8);
+        }
+    }
+
+    /// `cargo test --release bench_1080 -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn bench_1080() {
+        let (w, h) = (1920, 1080);
+        let uyvy: Vec<u8> = (0..w * h * 2).map(|i| (i * 7 % 251) as u8).collect();
+        let mut v = vec![0u8; v210_frame_bytes(w, h)];
+        let mut p = vec![0u8; 4 * w * h];
+        let mut u = vec![0u8; 2 * w * h];
+        let t = |name: &str, f: &mut dyn FnMut()| {
+            let mut best = f64::MAX;
+            for _ in 0..100 {
+                let s = std::time::Instant::now();
+                f();
+                best = best.min(s.elapsed().as_secs_f64() * 1000.0);
+            }
+            println!("{name}: {best:.2} ms (best of 100)");
+        };
+        t("uyvy→v210", &mut || uyvy_to_v210(&uyvy, 2 * w, w, h, &mut v));
+        t("v210→uyvy", &mut || v210_to_uyvy(&v, w, h, &mut u));
+        let mut u2 = vec![0u8; 2 * w * h];
+        v210_to_uyvy_scalar(&v, w, h, &mut u2);
+        assert_eq!(u, u2);
+        t("v210→p216", &mut || v210_to_p216(&v, w, h, &mut p));
+        t("p216→v210", &mut || p216_to_v210(&p, 2 * w, w, h, &mut v));
     }
 }

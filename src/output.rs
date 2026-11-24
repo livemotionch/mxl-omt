@@ -57,6 +57,7 @@ pub struct Output {
     black: Vec<u8>,
     black_size: (usize, usize),
     revision: u64,
+    connections: i32,
     sec: Second,
     sec_start: Instant,
 }
@@ -96,6 +97,7 @@ impl Output {
             black: Vec::new(),
             black_size: (0, 0),
             revision: u64::MAX,
+            connections: 0,
             sec: Second::default(),
             sec_start: Instant::now(),
         })
@@ -135,6 +137,16 @@ impl Output {
                 continue;
             }
             self.routes();
+            // Nobody connected: keep the reader current, send nothing
+            // (libomt would encode every frame for no one).
+            if self.connections == 0 {
+                self.video.poll(&self.api, &mut self.instances, &self.clock, now);
+                n += 1;
+                if self.sec_start.elapsed().as_secs_f64() >= 1.0 {
+                    self.publish();
+                }
+                continue;
+            }
             let src_idx = n.saturating_sub(self.config.out_read_offset);
             let src_t = self.clock.index_to_time(&self.rate, src_idx);
             self.video_frame(src_t, now);
@@ -333,10 +345,18 @@ impl Output {
             st.convert_ms = s.convert_ns as f64 / s.frames as f64 / 1e6;
             st.send_ms = s.send_ns as f64 / s.frames as f64 / 1e6;
         }
-        st.connections = self.sender.connections();
+        self.connections = self.sender.connections();
+        st.connections = self.connections;
+        if self.connections == 0 {
+            st.fps = 0.0;
+        }
         st.video_mbps = v.bytes_sent_since_last as f64 * 8.0 / 1e6 / secs;
         st.audio_mbps = a.bytes_sent_since_last as f64 * 8.0 / 1e6 / secs;
-        st.encode_ms = v.codec_time_since_last as f64;
+        st.encode_ms = if v.frames_since_last > 0 {
+            v.codec_time_since_last as f64 / v.frames_since_last as f64
+        } else {
+            0.0
+        };
         st.omt_dropped = v.frames_dropped;
         if st.address.is_empty() {
             st.address = self.sender.address();

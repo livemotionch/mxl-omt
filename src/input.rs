@@ -588,8 +588,9 @@ impl Input {
         }
         if let Some(v) = vs {
             st.video_mbps = v.bytes_received_since_last as f64 * 8.0 / 1e6 / secs;
+            // libomt's codec time "since last" is ms over the interval.
             st.decode_ms = if v.frames_since_last > 0 {
-                v.codec_time_since_last as f64
+                v.codec_time_since_last as f64 / v.frames_since_last as f64
             } else {
                 0.0
             };
