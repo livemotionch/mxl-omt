@@ -98,6 +98,9 @@ pub struct Input {
     last_written: u64,
     last_frame: Option<Instant>,
     next_sample: Option<u64>,
+    /// Grain time − sender time of the video frames (smoothed): where the
+    /// audio goes, so it lands exactly as late as the picture
+    av_shift: Option<i64>,
     last_audio: Option<Instant>,
     sec: Second,
     sec_start: Instant,
@@ -167,6 +170,7 @@ impl Input {
             last_written: 0,
             last_frame: None,
             next_sample: None,
+            av_shift: None,
             last_audio: None,
             sec: Second::default(),
             sec_start: Instant::now(),
@@ -214,6 +218,7 @@ impl Input {
         self.source = want.clone();
         self.timing = None;
         self.next_sample = None;
+        self.av_shift = None;
         {
             let mut st = lock(&self.shared.inputs[self.i].status);
             st.source = want.clone();
@@ -295,6 +300,7 @@ impl Input {
             Some(_) => {}
         }
         if resync {
+            self.av_shift = None;
             lock(&self.shared.inputs[self.i].status).resyncs += 1;
         }
         let d = self.timing.as_ref().unwrap().delay;
@@ -340,6 +346,7 @@ impl Input {
             if let Some(t) = &mut self.timing {
                 t.delay += (now_idx as i64 - j as i64) * self.period as i64;
             }
+            self.av_shift = None;
             lock(&self.shared.inputs[self.i].status).resyncs += 1;
             j = now_idx;
         }
@@ -406,7 +413,14 @@ impl Input {
         self.last_frame = Some(Instant::now());
         self.write_video(j, false);
         let t_j = self.clock.index_to_time(&self.rate, j) as i64;
-        let lat = (t_j - f.timestamp.saturating_mul(100)) as f64 / 1e6;
+        let shift = t_j - f.timestamp.saturating_mul(100);
+        // Frame-synchronised sources shift by up to a grain from frame to
+        // frame: the audio follows the average.
+        self.av_shift = Some(match self.av_shift {
+            None => shift,
+            Some(a) => a + (shift - a) / 16,
+        });
+        let lat = shift as f64 / 1e6;
         if lat.abs() < 10_000.0 {
             self.sec.latency_sum += lat;
         }
@@ -449,7 +463,10 @@ impl Input {
         if (f.data_length as usize) < n * ch * 4 {
             return;
         }
-        let target = self.map(f.timestamp, arrival, false);
+        let mut target = self.map(f.timestamp, arrival, false);
+        if let Some(shift) = self.av_shift {
+            target = (f.timestamp.saturating_mul(100) + shift).max(0) as u64;
+        }
         let s0 = self.clock.time_to_index(&self.arate, target);
         let data = unsafe { std::slice::from_raw_parts(f.data as *const f32, n * ch) };
         let mut skip = 0usize;
