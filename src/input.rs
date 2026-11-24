@@ -330,6 +330,7 @@ impl Input {
                 format!("{:.2}", f.frame_rate_n as f64 / f.frame_rate_d as f64)
             });
             st.interlaced = f.flags & omt::FLAG_INTERLACED != 0;
+            st.video_ts_phase_ms = (f.timestamp.saturating_mul(100)).rem_euclid(self.period as i64) as f64 / 1e6;
             if st.sender.is_none() {
                 st.sender = self.receiver.as_ref().and_then(|r| r.sender_info()).map(|(p, m, v)| format!("{m} {p} {v}"));
             }
@@ -454,6 +455,8 @@ impl Input {
             st.audio_frames += 1;
             st.audio_rate = f.sample_rate.max(0) as u32;
             st.audio_channels = f.channels.max(0) as u32;
+            st.audio_samples = f.samples_per_channel.max(0) as u32;
+            st.audio_ts_phase_ms = (f.timestamp.saturating_mul(100)).rem_euclid(self.period as i64) as f64 / 1e6;
         }
         if f.codec != codec::FPA1 || f.sample_rate != 48_000 || f.data.is_null() || f.samples_per_channel <= 0 {
             return;

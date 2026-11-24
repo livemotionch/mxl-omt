@@ -59,6 +59,12 @@ pub struct InputStatus {
     /// libomt: decode time per frame (ms) and frames it dropped
     pub decode_ms: f64,
     pub omt_dropped: i64,
+    /// Sender timestamps of the last video and audio frame modulo the grain
+    /// period (ms), and the samples per audio frame: diagnostics of A/V
+    /// alignment at the sender
+    pub video_ts_phase_ms: f64,
+    pub audio_ts_phase_ms: f64,
+    pub audio_samples: u32,
     pub video_flow: String,
     pub audio_flow: String,
 }
