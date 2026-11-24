@@ -152,3 +152,26 @@ lm-mxl-omt: Livemotion, private. It uses and ships, unmodified:
   `src/reader.rs` from lm-mxl-mixer.
 - Structure and conventions (env vars, NMOS layout, exit codes, signal loss)
   follow LeeO86's mxl-decklink (MIT); no code from it.
+
+## Test results and known gaps
+
+Measured on the mxl-test VM: [docs/test-results.md](docs/test-results.md). In short,
+1080p50 through OMT and back adds one grain (20 ms) with A/V sync unchanged, 8 streams
+each way ran with no dropped or late frames at ~25% of a core per stream pair, and
+libomt's own example sender and receiver interoperate.
+
+Known gaps:
+
+- Only on one host so far: all OMT traffic was loopback TCP. Real networks (and
+  mDNS across hosts; the Infomaniak cloud drops multicast) are untested.
+- The P216 (10-bit) conversions are scalar (≈2 ms a frame each way); 8-bit uses AVX2.
+- Scaling (another source size) is unit-tested, not tested with a live source.
+- Interlaced sources are written as progressive frames; no field handling.
+- Audio: 48 kHz only (others are counted and replaced by silence); no resampling of a
+  drifting sender's audio: its drift is absorbed by a 10 ms slip, then a resync.
+- No OMT metadata, tally, preview stream, or alpha (UYVA/PA16 alpha is dropped; v210a
+  is not produced).
+- The latency trim keeps the delay over the slowest frame of 2 s; there is no tolerance
+  for a rare late frame (a spike keeps the input at 2 grains).
+- OMT discovery needs an avahi-daemon; the image runs one in the container as root
+  before dropping to `RUN_AS`.
