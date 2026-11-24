@@ -77,3 +77,16 @@ headless in the bridge's container (sharing its avahi-daemon):
   mixer's programme (keyed browser source and PiP) comes back through OMT intact.
 - Restart of the bridge: IS-05 routes and input sources restored, all inputs back at
   50 fps within seconds, the multiviewer recovered by itself.
+
+## Soak: 8 + 8 streams, 10 minutes
+
+All 8 outputs looped into the 8 inputs (test player, mxl-avsync generator), 1080p50, UYVY:
+
+| | |
+|---|---|
+| Grains written by the inputs | 240,080 (8 × 50 × 600 = 240,000) |
+| Dropped / repeated / black / resyncs / audio resyncs / silence | 0 / 0 / 0 / 0 / 0 / 0 |
+| Frames sent by the outputs | 240,080; late 0, held 0, skipped 0, audio gaps 0 |
+| Bridge CPU | 208% of one core on average, 244% at most |
+| Host CPU | 54.3% of 16 vCPU (stack alone ≈ 40%) |
+| Latency per input | 20 ms for 6 inputs, 40 ms for 2 (a frame > 40 ms after its source grain early on); transit max 31.5 ms in the last second |
