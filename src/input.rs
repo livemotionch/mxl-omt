@@ -12,9 +12,9 @@
 //! rate or a free-running clock comes out frame-synchronised: two frames for
 //! one grain → the later one is dropped; a grain without a frame → the last
 //! one is repeated. `D` is picked again (a resync) when frames keep coming a
-//! grain later than their mapping, or when the mapping is more than a grain
-//! later than needed for two seconds (latency trim), or the source clock
-//! jumps.
+//! grain later than their mapping, or when a delay that puts frames a
+//! grain earlier would have fitted every frame of the last two seconds
+//! (latency trim), or the source clock jumps.
 //!
 //! Loss: grains nobody wrote are filled one grain late (half a period of
 //! slack) with the last frame for `OMT_IN_HOLD_MS` (`OMT_IN_LOSS=hold`),
@@ -291,8 +291,12 @@ impl Input {
                 }
                 t.win_max = t.win_max.max(transit);
                 if t.win_start.elapsed().as_secs() >= 2 {
-                    if t.delay - (t.win_max + extra) > p {
-                        t.delay = t.win_max + extra;
+                    // Trim when the slowest frame of the window would still
+                    // land in time with a delay that puts this frame a
+                    // grain earlier (a delay picked in a startup burst).
+                    let shorter = t.win_max + extra;
+                    if shorter < t.delay && (ts_ns + shorter).div_euclid(p) < (ts_ns + t.delay).div_euclid(p) {
+                        t.delay = shorter;
                         resync = true;
                     }
                     t.win_max = transit;
