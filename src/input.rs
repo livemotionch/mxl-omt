@@ -492,13 +492,18 @@ impl Input {
                 self.write_silence(next, (s0 - next) as usize);
                 s0
             }
-            Some(next) if s0 < next && next - s0 < n as u64 => {
-                // Overlaps what is written: the new part only.
+            Some(next) if s0 < next => {
+                // Before what is written (MXL writes only forward): the
+                // part after it, if any.
                 lock(&self.shared.inputs[self.i].status).audio_resyncs += 1;
+                if next - s0 >= n as u64 {
+                    return;
+                }
                 skip = (next - s0) as usize;
                 next
             }
             Some(_) => {
+                // Far ahead (more than a second): start there.
                 lock(&self.shared.inputs[self.i].status).audio_resyncs += 1;
                 s0
             }
@@ -526,7 +531,7 @@ impl Input {
                 self.next_sample = Some(start + count as u64);
                 self.last_audio = Some(Instant::now());
             }
-            Err(e) => self.set_error(Some(format!("MXL audio write: {e}"))),
+            Err(e) => self.set_error(Some(format!("MXL audio write at {start}+{count}: {e}"))),
         }
     }
 

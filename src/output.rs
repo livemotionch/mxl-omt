@@ -141,6 +141,7 @@ impl Output {
             // (libomt would encode every frame for no one).
             if self.connections == 0 {
                 self.video.poll(&self.api, &mut self.instances, &self.clock, now);
+                lock(&self.shared.outputs[self.i].status).state = "idle".into();
                 n += 1;
                 if self.sec_start.elapsed().as_secs_f64() >= 1.0 {
                     self.publish();
