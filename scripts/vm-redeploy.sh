@@ -2,7 +2,7 @@
 # Copy this checkout to the mxl-test VM, build lm-mxl-omt:dev there, restart the
 # test instance (~/lm-mxl-omt-run, compose project lm-omt).
 set -euo pipefail
-host="${1:-ubuntu@200.234.112.226}"
+host="${1:?usage: vm-redeploy.sh <user@vm>}"
 cd "$(dirname "$0")/.."
 rsync -a --delete --exclude target --exclude .git ./ "$host:lm-mxl-omt/"
 ssh "$host" 'cd ~/lm-mxl-omt && docker build -q --build-arg UBUNTU=public.ecr.aws/docker/library/ubuntu:24.04 -f docker/Dockerfile -t lm-mxl-omt:dev . \

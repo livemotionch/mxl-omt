@@ -137,7 +137,7 @@ libmxl nor libomt.
 
 ## Licences and attributions
 
-lm-mxl-omt: Livemotion, private. It uses and ships, unmodified:
+lm-mxl-omt: © Livemotion. No licence has been chosen yet, so all rights are reserved. It uses and ships, unmodified:
 
 - **libomt**, **libomtnet**, **libvmx** and the OMT **Examples**
   (`omtsendtest`, `omtrecvtest`), © 2025 Open Media Transport Contributors,
