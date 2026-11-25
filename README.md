@@ -137,7 +137,7 @@ libmxl nor libomt.
 
 ## Licences and attributions
 
-lm-mxl-omt: © Livemotion. No licence has been chosen yet, so all rights are reserved. It uses and ships, unmodified:
+lm-mxl-omt is © 2026 Livemotion, released under the [MIT licence](LICENSE). It uses and ships, unmodified:
 
 - **libomt**, **libomtnet**, **libvmx** and the OMT **Examples**
   (`omtsendtest`, `omtrecvtest`), © 2025 Open Media Transport Contributors,
@@ -148,8 +148,8 @@ lm-mxl-omt: © Livemotion. No licence has been chosen yet, so all rights are res
   Rust bindings (Apache-2.0).
 - **mxl-nmos** (LeeO86, MIT / Apache-2.0).
 - `src/mxlio/domain.rs` and `scripts/build-mxl.sh` come from LeeO86's
-  mxl-audio-mixer (MIT) through lm-mxl-mixer; `src/mxlio/` and
-  `src/reader.rs` from lm-mxl-mixer.
+  mxl-audio-mixer (MIT) through [lm-mxl-mixer](https://github.com/livemotionch/lm-mxl-mixer); `src/mxlio/`,
+  `src/reader.rs` and `src/simd.rs` from lm-mxl-mixer (MIT).
 - Structure and conventions (env vars, NMOS layout, exit codes, signal loss)
   follow LeeO86's mxl-decklink (MIT); no code from it.
 

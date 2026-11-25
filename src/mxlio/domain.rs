@@ -1,7 +1,8 @@
 //! MXL domains: the domains visible below the scan path (mirrors
 //! included) and the mixer's own output domain.
 //!
-//! From LeeO86/mxl-audio-mixer `src/mxlio/domain.rs` (MIT), commit f575066;
+//! From LeeO86/mxl-audio-mixer `src/mxlio/domain.rs`, commit f575066,
+//! Copyright (c) 2026 Adrian Hilber, MIT licence;
 //! only the wording of the domain description differs.
 
 use std::path::{Path, PathBuf};
@@ -146,7 +147,7 @@ pub fn ensure_output_domain(
             let body = serde_json::json!({
                 "id": id.to_string(),
                 "label": label,
-                "description": format!("{label} vision mixer (lm-mxl-mixer) output domain"),
+                "description": format!("{label} output domain"),
                 "tags": {}
             });
             if write_new(&def, &serde_json::to_vec_pretty(&body).unwrap_or_default())

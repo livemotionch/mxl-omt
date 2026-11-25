@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build libmxl at the platform pin (dmf-mxl/mxl release/v1.1, 218ddaa) with the
 # fabrics library off, and install it (default /opt/mxl).
-# From LeeO86/mxl-audio-mixer scripts/build-mxl.sh (MIT), commit f575066.
+# From LeeO86/mxl-audio-mixer scripts/build-mxl.sh, commit f575066,
+# Copyright (c) 2026 Adrian Hilber, MIT licence.
 #
 #   scripts/build-mxl.sh [prefix]
 #

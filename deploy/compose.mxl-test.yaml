@@ -1,5 +1,5 @@
-# lm-mxl-omt on the mxl-test VM, next to mxl-stack (for lm-infra's
-# mxl-test/compose.lm-omt.yaml). Image built on the VM from ~/lm-mxl-omt
+# lm-mxl-omt on the mxl-test VM, next to mxl-stack's single-host
+# example. Image built on the VM from ~/lm-mxl-omt
 # (docker/Dockerfile). Web 8200 (Caddy 18200), NMOS 3334, OMT 6400–6431.
 services:
   omt-bridge:

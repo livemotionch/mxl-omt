@@ -1,4 +1,4 @@
-//! From lm-mxl-mixer `src/engine/inputs.rs` (Livemotion): an MXL video reader
+//! From lm-mxl-mixer's `src/engine/inputs.rs` (MIT): an MXL video reader
 //! for the OMT outputs. Video inputs: an IS-05 route (domain, flow) becomes a reader, and per
 //! output frame the grain to draw.
 //!

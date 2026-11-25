@@ -1,5 +1,5 @@
-//! AVX2 / SSSE3 v210 → 8-bit unpack, from lm-mxl-mixer `src/lmiomixer/simd10.rs`
-//! (Livemotion). The plain twin is `convert::v210_to_uyvy`'s scalar loop; the
+//! AVX2 / SSSE3 v210 → 8-bit unpack, from lm-mxl-mixer's
+//! `src/compositor/simd10.rs` (MIT). The plain twin is `convert::v210_to_uyvy`'s scalar loop; the
 //! tests compare them.
 
 #![cfg(target_arch = "x86_64")]
